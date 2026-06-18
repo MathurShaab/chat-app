@@ -10,22 +10,28 @@ export const MessagingService = {
             const permission = await Notification.requestPermission();
             if (permission === "granted") {
                 
-                console.log("🛰️ Registering sub-folder Service Worker for GitHub Pages...");
+                // 🔥 DYNAMIC PATH FOR GITHUB PAGES SUB-FOLDER 🔥
+                const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+                const swPath = `${basePath}firebase-messaging-sw.js`;
                 
-                // 🔥 THE FIX: Direct path se fresh registration object nikaal rahe hain
-                // Isse Firebase main root par bhagna band kar dega
-                const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+                console.log(`🛰️ Fetching Service Worker from: ${swPath}`);
                 
-                console.log("🛰️ Requesting FCM Token with custom registration instance...");
+                // Explicitly sub-folder ke scope par register karke instance nikalie
+                const registration = await navigator.serviceWorker.register(swPath, { scope: basePath });
+                
+                // SECURITY CHECK: Wait karein jab tak service worker poori tarah ready na ho jaye
+                await navigator.serviceWorker.ready; 
+
+                console.log("🛰️ Requesting FCM Token from Firebase...");
                 const currentToken = await getToken(messaging, { 
                     vapidKey: "BFcYPtqen8CtLS0llB1Wde5vIHSD5L4wBRXTbQVQ8ipoSIGHwamHun_-Lx0fP1WNu7X31IjyXLUD6PuRtpQGUf411",
-                    serviceWorkerRegistration: registration // Fresh instance pass kiya
+                    serviceWorkerRegistration: registration // Yeh fresh aur tight instance pass kiya
                 });
 
                 if (currentToken) {
                     const userRef = doc(db, "users", userId);
                     await setDoc(userRef, { fcmToken: currentToken }, { merge: true });
-                    console.log("🛰️ FCM Token successfully synced on GitHub Pages!");
+                    console.log("🛰️ FCM Token successfully synced in Sub-folder!");
                 } else {
                     console.log("No registration token available.");
                 }

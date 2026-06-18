@@ -17,12 +17,22 @@ class AppCore {
     }
 
     async init() {
-        console.log("🛰️ STEP 2: Connecting with Firebase Auth Listener...");
+        console.log("🛰️ STEP 1: AppCore Engine started successfully!");
+
+        // 🔥 DYNAMIC SUB-FOLDER SERVICE WORKER REGISTRATION 🔥
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/firebase-messaging-sw.js')
-                    .then(reg => console.log('🚀 PWA Service Worker Registered Successfully!', reg.scope))
-                    .catch(err => console.error('❌ Service Worker Registration Failed:', err));
+            window.addEventListener('load', async () => {
+                try {
+                    // Yeh automatic pata lagayega ki app kis sub-folder mein chal rahi hai
+                    const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+                    const swPath = `${basePath}firebase-messaging-sw.js`;
+                    
+                    // Scope ke sath register karein taaki GitHub Pages khush rahe
+                    const reg = await navigator.serviceWorker.register(swPath, { scope: basePath });
+                    console.log('🚀 PWA Service Worker Registered at Scope:', reg.scope);
+                } catch (err) {
+                    console.error('❌ Service Worker Registration Failed:', err);
+                }
             });
         }
         
