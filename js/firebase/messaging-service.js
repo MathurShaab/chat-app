@@ -24,7 +24,7 @@ export const MessagingService = {
 
                 console.log("🛰️ Requesting FCM Token from Firebase...");
                 const currentToken = await getToken(messaging, { 
-                    vapidKey: "BFcYPtqen8CtLS0llB1Wde5vIHSD5L4wBRXTbQVQ8ipoSIGHwamHun_-Lx0fP1WNu7X31IjyXLUD6PuRtpQGUf411",
+                    vapidKey: "BFcYPtqen8CtLS0llB1Wde5vIHSD5L4wBRXTbQVQ8ipoSIGHwamHun_-Lx0fP1WNu7X31IjyXLUD6PuRtpQGUf4",
                     serviceWorkerRegistration: registration // Yeh fresh aur tight instance pass kiya
                 });
 
