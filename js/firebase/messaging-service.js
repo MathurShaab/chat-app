@@ -10,14 +10,16 @@ export const MessagingService = {
             const permission = await Notification.requestPermission();
             if (permission === "granted") {
                 
-                // 🔥 GITHUB PAGES SPECIAL FIX 🔥
-                // Pehle active service worker ka registration nikalie
-                const serviceWorkerRegistration = await navigator.serviceWorker.ready;
+                console.log("🛰️ Registering sub-folder Service Worker for GitHub Pages...");
                 
-                // Ab getToken ko batayein ki isi sub-folder waale service worker ko use kare
+                // 🔥 THE FIX: Direct path se fresh registration object nikaal rahe hain
+                // Isse Firebase main root par bhagna band kar dega
+                const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+                
+                console.log("🛰️ Requesting FCM Token with custom registration instance...");
                 const currentToken = await getToken(messaging, { 
                     vapidKey: "BFcYPtqen8CtLS0llB1Wde5vIHSD5L4wBRXTbQVQ8ipoSIGHwamHun_-Lx0fP1WNu7X31IjyXLUD6PuRtpQGUf411",
-                    serviceWorkerRegistration: serviceWorkerRegistration // Yeh line add ki hai
+                    serviceWorkerRegistration: registration // Fresh instance pass kiya
                 });
 
                 if (currentToken) {
@@ -27,15 +29,18 @@ export const MessagingService = {
                 } else {
                     console.log("No registration token available.");
                 }
+            } else {
+                console.log("Notification permission denied.");
             }
         } catch (error) {
-            console.error("FCM Token Generation Error on Mobile:", error);
+            console.error("FCM Token Generation Error:", error);
         }
     },
 
     listenForForegroundMessages() {
         if (!messaging) return;
         onMessage(messaging, (payload) => {
+            console.log("🛰️ Message received in foreground: ", payload);
             alert(`New Notification: ${payload.notification.title}\n${payload.notification.body}`);
         });
     }
