@@ -1,7 +1,7 @@
 {
   "name": "Nexus Chat App",
   "short_name": "NexusChat",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#1a1a1e",
   "theme_color": "#6366f1",
