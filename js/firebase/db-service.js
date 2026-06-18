@@ -73,23 +73,61 @@ export const DbService = {
     },
 
     async sendMessage(chatId, senderId, text) {
-        if (!text.trim()) return;
-        
-        const messagesRef = collection(db, "chats", chatId, "messages");
-        await addDoc(messagesRef, {
-            senderId,
-            text: text.trim(),
-            timestamp: serverTimestamp(),
-            seen: false
-        });
+    if (!text.trim()) return;
+    
+    // 1. Messages sub-collection mein naya message add karna
+    const messagesRef = collection(db, "chats", chatId, "messages");
+    await addDoc(messagesRef, {
+        senderId,
+        text: text.trim(),
+        timestamp: serverTimestamp(),
+        seen: false
+    });
 
-        const chatRef = doc(db, "chats", chatId);
-        await updateDoc(chatRef, {
-            lastMessage: text.trim(),
-            lastMessageTimestamp: serverTimestamp(),
-            lastMessageSenderId: senderId
-        });
-    },
+    // 2. Chat room ka last message status update karna
+    const chatRef = doc(db, "chats", chatId);
+    await updateDoc(chatRef, {
+        lastMessage: text.trim(),
+        lastMessageTimestamp: serverTimestamp(),
+        lastMessageSenderId: senderId
+    });
+
+    // 3. 🔥 VERCEL AUTOMATED PUSH NOTIFICATION LOGIC 🔥
+    try {
+        // Chat document se metadata nikalne ke liye getDoc karenge
+        // (Dhyan rakhein: Agar aapke file ke top par 'getDoc' imported nahi hai, toh import { getDoc } from "firebase/firestore" kar lein)
+        const chatSnap = await getDoc(chatRef);
+        
+        if (chatSnap.exists()) {
+            const chatData = chatSnap.data();
+            
+            // Maan rahe hain ki chat doc mein 'participants' array hai, usme se dusre bande ki ID nikalenge
+            const receiverId = chatData.participants?.find(id => id !== senderId);
+
+            if (receiverId) {
+                // Live Vercel API ko background mein trigger karna
+                await fetch('https://chat-app-kappa-sooty.vercel.app/api/send-notification', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        receiverId: receiverId,                  // Samne waale ki ID
+                        senderId: senderId,                      // Aapki apni ID
+                        senderName: "New Message",               // Baad mein aap apna naam dynamic bhej sakte hain
+                        text: text.trim()                        // Chat text
+                    })
+                });
+                console.log("🛰️ Smart notification command dispatched to Vercel!");
+            } else {
+                console.warn("⚠️ Receiver ID not found in participants array.");
+            }
+        }
+    } catch (notifError) {
+        // Notification fail hone par chat app crash nahi honi chahiye, isliye catch lagaya hai
+        console.error("❌ Failed to trigger Vercel notification:", notifError);
+    }
+},
 
     listenToMessages(chatId, callback) {
         const q = query(
