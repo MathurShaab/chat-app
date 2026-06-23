@@ -1,9 +1,23 @@
 import { db } from "./firebase-init.js";
 import { 
-    collection, doc, addDoc, setDoc, updateDoc, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, getDoc
+    collection, 
+    doc, 
+    addDoc, 
+    setDoc, 
+    updateDoc, 
+    getDoc, 
+    getDocs, 
+    writeBatch, 
+    query, 
+    where, 
+    orderBy, 
+    onSnapshot, 
+    serverTimestamp, 
+    increment 
 } from "firebase/firestore";
 
 export const DbService = {
+    // 🔍 1. Users ko Search karna (Name ya Email se)
     async searchUsers(searchQuery, currentUserId) {
         const usersRef = collection(db, "users");
         const snapshot = await getDocs(usersRef);
@@ -12,7 +26,6 @@ export const DbService = {
         snapshot.forEach((doc) => {
             const data = doc.data();
             
-            // SAFE CHECK: Pehle ensure karein ki data, displayName aur email teeno maujood hain
             if (data && data.uid && data.uid !== currentUserId && data.displayName && data.email) {
                 const nameMatch = data.displayName.toLowerCase().includes(searchQuery.toLowerCase());
                 const emailMatch = data.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -25,6 +38,7 @@ export const DbService = {
         return results;
     },
 
+    // 📁 2. Chat Room Fetch karna ya Naya Banana
     async getOrCreateChat(currentUserId, targetUserId) {
         const chatsRef = collection(db, "chats");
         const q = query(chatsRef, where("participants", "array-contains", currentUserId));
@@ -50,6 +64,7 @@ export const DbService = {
         return newChatRef.id;
     },
 
+    // 📑 3. Sidebar Chat List ko Live Listen karna
     listenToUserChats(userId, callback) {
         const q = query(
             collection(db, "chats"), 
@@ -72,63 +87,95 @@ export const DbService = {
         });
     },
 
+    // ✉️ 4. Message Bhejna (+ Unread Count Auto-Increment + Vercel Notification Trigger)
     async sendMessage(chatId, senderId, text) {
-    if (!text.trim()) return;
-    
-    // 1. Messages sub-collection mein naya message add karna
-    const messagesRef = collection(db, "chats", chatId, "messages");
-    await addDoc(messagesRef, {
-        senderId,
-        text: text.trim(),
-        timestamp: serverTimestamp(),
-        seen: false
-    });
-
-    // 2. Chat room ka last message status update karna
-    const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, {
-        lastMessage: text.trim(),
-        lastMessageTimestamp: serverTimestamp(),
-        lastMessageSenderId: senderId
-    });
-
-    // 3. 🔥 VERCEL AUTOMATED PUSH NOTIFICATION LOGIC 🔥
-    try {
-        // Chat document se metadata nikalne ke liye getDoc karenge
-        // (Dhyan rakhein: Agar aapke file ke top par 'getDoc' imported nahi hai, toh import { getDoc } from "firebase/firestore" kar lein)
-        const chatSnap = await getDoc(chatRef);
+        if (!text.trim()) return;
         
-        if (chatSnap.exists()) {
-            const chatData = chatSnap.data();
-            
-            // Maan rahe hain ki chat doc mein 'participants' array hai, usme se dusre bande ki ID nikalenge
-            const receiverId = chatData.participants?.find(id => id !== senderId);
+        const messagesRef = collection(db, "chats", chatId, "messages");
+        await addDoc(messagesRef, {
+            senderId,
+            text: text.trim(),
+            timestamp: serverTimestamp(),
+            seen: false
+        });
 
-            if (receiverId) {
-                // Live Vercel API ko background mein trigger karna
+        const chatRef = doc(db, "chats", chatId);
+        let receiverId = null;
+
+        try {
+            const chatSnap = await getDoc(chatRef);
+            if (chatSnap.exists()) {
+                const chatData = chatSnap.data();
+                receiverId = chatData.participants?.find(id => id !== senderId);
+            }
+        } catch (metaError) {
+            console.error("❌ Error fetching chat metadata:", metaError);
+        }
+
+        const chatUpdateData = {
+            lastMessage: text.trim(),
+            lastMessageTimestamp: serverTimestamp(),
+            lastMessageSenderId: senderId
+        };
+
+        if (receiverId) {
+            chatUpdateData[`unreadCount.${receiverId}`] = increment(1);
+        }
+
+        await updateDoc(chatRef, chatUpdateData);
+
+        if (receiverId) {
+            try {
                 await fetch('https://chat-app-kappa-sooty.vercel.app/api/send-notification', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        receiverId: receiverId,                  // Samne waale ki ID
-                        senderId: senderId,                      // Aapki apni ID
-                        senderName: "New Message",               // Baad mein aap apna naam dynamic bhej sakte hain
-                        text: text.trim()                        // Chat text
+                        receiverId: receiverId,                  
+                        senderId: senderId,                      
+                        senderName: "New Message",               
+                        text: text.trim()                        
                     })
                 });
                 console.log("🛰️ Smart notification command dispatched to Vercel!");
-            } else {
-                console.warn("⚠️ Receiver ID not found in participants array.");
+            } catch (notifError) {
+                console.error("❌ Failed to trigger Vercel notification:", notifError);
             }
         }
-    } catch (notifError) {
-        // Notification fail hone par chat app crash nahi honi chahiye, isliye catch lagaya hai
-        console.error("❌ Failed to trigger Vercel notification:", notifError);
-    }
-},
+    },
 
+    // 🔵 5. Chat Window Khulne Par Unread Clear Karna aur Ticks Blue Karna
+    async markChatAsRead(chatId, currentUserId) {
+        try {
+            const chatRef = doc(db, "chats", chatId);
+            
+            const clearCounter = {};
+            clearCounter[`unreadCount.${currentUserId}`] = 0;
+            await updateDoc(chatRef, clearCounter);
+
+            const messagesRef = collection(db, "chats", chatId, "messages");
+            const unreadQuery = query(
+                messagesRef, 
+                where("senderId", "!=", currentUserId), 
+                where("seen", "==", false)
+            );
+
+            const querySnapshot = await getDocs(unreadQuery);
+            
+            const batch = writeBatch(db);
+            querySnapshot.forEach((msgDoc) => {
+                batch.update(msgDoc.ref, { seen: true });
+            });
+            
+            await batch.commit();
+            console.log("🔵 Chat marked as read and Blue Ticks synced!");
+        } catch (error) {
+            console.error("❌ Error marking messages as read:", error);
+        }
+    },
+
+    // 💬 6. Chat Window Ke Messages Live Listen Karna
     listenToMessages(chatId, callback) {
         const q = query(
             collection(db, "chats", chatId, "messages"), 
@@ -138,5 +185,20 @@ export const DbService = {
             const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             callback(messages);
         });
+    },
+
+    // 🟢 7. Online / Offline Status Update Karna (Presence System)
+    async updateUserPresence(userId, status) {
+        if (!userId) return;
+        try {
+            const userRef = doc(db, "users", userId);
+            await updateDoc(userRef, {
+                status: status,       // "online" ya "offline"
+                lastSeen: serverTimestamp()
+            });
+            console.log(`🟢 Presence updated to '${status}' for user: ${userId}`);
+        } catch (error) {
+            console.error("❌ Error updating user presence:", error);
+        }
     }
 };
