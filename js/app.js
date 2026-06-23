@@ -79,23 +79,22 @@ class AppCore {
         }
     }
 
-    async routeToDashboard(user) {
+   async routeToDashboard(user) {
         this.mainContent.innerHTML = ChatComponent.renderMainLayout();
         
-        // 👤 NAME RESOLUTION ENGINE: Auth state agar wrong backup de, toh seedha Firestore database node se real name uthao
         const nameElement = document.getElementById("current-user-name");
         nameElement.textContent = user.displayName || "Syncing profile...";
 
         try {
             const dbUserData = await DbService.getUserData(user.uid);
             if (dbUserData && dbUserData.displayName) {
-                nameElement.textContent = dbUserData.displayName; // Registration waala real username set ho gaya!
+                nameElement.textContent = dbUserData.displayName;
                 if(dbUserData.photoURL) {
                     document.getElementById("current-user-avatar").src = dbUserData.photoURL;
                 }
             }
         } catch (nameErr) {
-            console.error("⚠️ Failed to resolve real username fallback:", nameErr);
+            console.error("⚠️ Failed to resolve username:", nameErr);
         }
         
         this.bindDashboardEvents();
@@ -104,27 +103,120 @@ class AppCore {
         MessagingService.requestPermissionAndGetToken(user.uid);
         MessagingService.listenForForegroundMessages();
 
-        // 📸 PROFILE AVATAR UPLOAD INTERFACE WITH REALTIME UPLOAD LOADER VISUALS
+        // ----------------------------------------------------
+        // ✂️ FEATURE 1: WHATSAPP-LIKE CROP, ROTATE & ORIENTATION LOGIC
+        // ----------------------------------------------------
+        let cropperInstance = null;
         const uploader = document.getElementById("avatar-file-uploader");
+        const cropModal = document.getElementById("image-crop-modal");
+        const targetCropImg = document.getElementById("cropper-target-img");
+
         if (uploader) {
-            uploader.addEventListener("change", async (e) => {
+            uploader.addEventListener("change", (e) => {
                 const file = e.target.files[0];
-                if(file) {
-                    const loader = document.getElementById("avatar-loader");
-                    if(loader) loader.classList.remove("hidden"); // 🔥 UI PROCESS LOADER START (Spinner Dikhao)
-                    
-                    try {
-                        console.log("📸 Activating micro-canvas compression array...");
-                        const compressedBase64 = await DbService.uploadProfileAvatar(this.currentUser.uid, file);
-                        document.getElementById("current-user-avatar").src = compressedBase64;
-                    } catch (uploadError) {
-                        console.error("❌ Avatar persistence vector collapsed:", uploadError);
-                    } finally {
-                        if(loader) loader.classList.add("hidden"); // 🔥 UI PROCESS LOADER END (Spinner Chupao)
-                    }
+                if (file) {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = (event) => {
+                        // Target image source mein binary load karo aur modal dikhao
+                        targetCropImg.src = event.target.result;
+                        cropModal.classList.remove("hidden");
+
+                        // Purane cropper instance ko clear karein agar exist karta ho
+                        if (cropperInstance) cropperInstance.destroy();
+
+                        // WhatsApp Rule: Circle grid, zoomable framework setup
+                        cropperInstance = new Cropper(targetCropImg, {
+                            aspectRatio: 1, // Full Square Grid
+                            viewMode: 1,
+                            dragMode: 'move',
+                            background: false,
+                            autoCropArea: 1,
+                            responsive: true
+                        });
+                    };
                 }
             });
         }
+
+        // Rotate Buttons Control Wiring
+        document.getElementById("crop-rotate-left").onclick = () => { if(cropperInstance) cropperInstance.rotate(-90); };
+        document.getElementById("crop-rotate-right").onclick = () => { if(cropperInstance) cropperInstance.rotate(90); };
+        
+        // Cancel Operation
+        document.getElementById("crop-cancel-btn").onclick = () => {
+            cropModal.classList.add("hidden");
+            if (cropperInstance) cropperInstance.destroy();
+            uploader.value = ""; // Clear file target input
+        };
+
+        // Save & Process Cropped Compression Canvas Array
+        document.getElementById("crop-save-btn").onclick = async () => {
+            if (!cropperInstance) return;
+
+            const avatarLoader = document.getElementById("avatar-loader");
+            if (avatarLoader) avatarLoader.classList.remove("hidden"); // Processing loader spinner on
+            cropModal.classList.add("hidden");
+
+            // Extract high-res matrix canvas with WhatsApp scaling properties
+            const canvas = cropperInstance.getCroppedCanvas({
+                width: 160,
+                height: 160,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high'
+            });
+
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+            if (cropperInstance) cropperInstance.destroy();
+            uploader.value = "";
+
+            try {
+                // Direct update method call on db-service layer
+                await DbService.uploadProfileAvatar(this.currentUser.uid, compressedBase64);
+                document.getElementById("current-user-avatar").src = compressedBase64;
+                console.log("📸 New cropped avatar orientation synced successfully.");
+            } catch (err) {
+                console.error("❌ Failed to push cropped binary profile stream:", err);
+            } finally {
+                if (avatarLoader) avatarLoader.classList.add("hidden"); // Processing loader spinner off
+            }
+        };
+
+        // ----------------------------------------------------
+        // 🖼️ FEATURE 2: WHATSAPP STYLE FULLSCREEN INTERACTIVE PREVIEW MODAL
+        // ----------------------------------------------------
+        const previewModal = document.getElementById("profile-preview-modal");
+        const previewModalImg = document.getElementById("preview-modal-img");
+        const previewModalName = document.getElementById("preview-modal-username");
+
+        // Global Event Delegation Node to catch clicks on any active user profile avatar
+        document.addEventListener("click", (e) => {
+            // Check if clicked element has avatar preview trigger metadata
+            const trigger = e.target.closest(".avatar-trigger-preview") || (e.target.id === "current-user-avatar" ? e.target : null);
+            
+            if (trigger) {
+                e.stopPropagation();
+                
+                // Fetch context specific credentials from current row element hierarchy
+                let targetName = "Profile Photo";
+                const row = trigger.closest(".chat-inbox-row") || trigger.closest("header");
+                
+                if (row) {
+                    const nameNode = row.querySelector("p") || row.querySelector("h4") || row.querySelector("h3");
+                    if (nameNode) targetName = nameNode.textContent.replace("🔒 End-to-End Encrypted", "").trim();
+                }
+
+                // Inject assets directly inside overlay view box
+                previewModalImg.src = trigger.src;
+                previewModalName.textContent = targetName;
+                previewModal.classList.remove("hidden"); // Open view panel
+            }
+        });
+
+        // Close View panel controls wire bindings
+        const closePreview = () => { previewModal.classList.add("hidden"); };
+        document.getElementById("preview-modal-close-btn").onclick = closePreview;
+        document.getElementById("profile-preview-close-zone").onclick = closePreview;
     }
 
     bindDashboardEvents() {

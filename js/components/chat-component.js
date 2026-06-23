@@ -1,5 +1,5 @@
 export const ChatComponent = {
-    // 🏢 Instagram Modern Layout Structure (With Processing Loader Spinner Attached)
+    // 🏢 Instagram Modern Layout Structure (With Crop, Rotate & Fullscreen Modals)
     renderMainLayout() {
         return `
         <div class="h-full flex bg-black text-[#f5f5f5] overflow-hidden antialiased font-sans">
@@ -79,7 +79,7 @@ export const ChatComponent = {
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                             </button>
                             <div class="relative">
-                                <img id="active-chat-avatar" src="assets/images/default-avatar.svg" class="w-9 h-9 rounded-full object-cover">
+                                <img id="active-chat-avatar" src="assets/images/default-avatar.svg" class="avatar-trigger-preview cursor-pointer w-9 h-9 rounded-full object-cover">
                             </div>
                             <div>
                                 <h4 id="active-chat-name" class="text-sm font-semibold text-zinc-100 tracking-tight">...</h4>
@@ -106,6 +106,53 @@ export const ChatComponent = {
                     </footer>
                 </div>
             </section>
+        </div>
+
+        <div id="image-crop-modal" class="hidden fixed inset-0 bg-black/95 z-50 flex flex-col justify-between p-5 backdrop-blur-md">
+            <header class="flex justify-between items-center max-w-xl mx-auto w-full border-b border-zinc-900 pb-3">
+                <h3 class="text-sm font-semibold tracking-tight text-zinc-200">Edit Profile Picture</h3>
+                <button id="crop-cancel-btn" class="text-xs text-zinc-400 hover:text-white transition-colors">Cancel</button>
+            </header>
+            
+            <main class="flex-1 max-w-md mx-auto w-full flex items-center justify-center overflow-hidden my-4">
+                <div class="max-h-[60vh] max-w-full">
+                    <img id="cropper-target-img" class="max-w-full block">
+                </div>
+            </main>
+            
+            <footer class="max-w-xl mx-auto w-full flex flex-col space-y-4 border-t border-zinc-900 pt-3 pb-4">
+                <div class="flex justify-center space-x-6">
+                    <button id="crop-rotate-left" class="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-full transition-all active:scale-95">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                        </svg>
+                    </button>
+                    <button id="crop-rotate-right" class="p-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-full transition-all active:scale-95">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" />
+                        </svg>
+                    </button>
+                </div>
+                <button id="crop-save-btn" class="w-full py-2.5 bg-[#0095F6] hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-all active:scale-[0.98]">
+                    Set Profile Photo
+                </button>
+            </footer>
+        </div>
+
+        <div id="profile-preview-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex flex-col justify-center items-center p-4 backdrop-blur-lg">
+            <div id="profile-preview-close-zone" class="absolute inset-0 cursor-zoom-out"></div>
+            
+            <div class="relative max-w-sm w-full bg-[#121212] border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl z-10">
+                <header class="p-4 flex items-center justify-between border-b border-zinc-900 bg-black/40">
+                    <h4 id="preview-modal-username" class="text-xs font-semibold text-zinc-200 tracking-tight">Profile Photo</h4>
+                    <button id="preview-modal-close-btn" class="p-1 text-zinc-400 hover:text-white transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </header>
+                <div class="w-full aspect-square bg-black flex items-center justify-center">
+                    <img id="preview-modal-img" src="assets/images/default-avatar.svg" class="w-full h-full object-cover">
+                </div>
+            </div>
         </div>`;
     },
 
@@ -114,7 +161,7 @@ export const ChatComponent = {
         const userAvatar = user.photoURL || 'assets/images/default-avatar.svg';
         return `
         <div data-uid="${user.uid}" class="search-user-row p-2.5 flex items-center space-x-3 rounded-lg hover:bg-zinc-900/50 cursor-pointer transition-all">
-            <img src="${userAvatar}" class="w-9 h-9 rounded-full object-cover">
+            <img src="${userAvatar}" class="avatar-trigger-preview cursor-pointer w-9 h-9 rounded-full object-cover">
             <div class="flex-1 min-w-0">
                 <p class="text-xs font-semibold text-zinc-200 truncate">${user.displayName}</p>
                 <p class="text-[10px] text-zinc-500 truncate">${user.email}</p>
@@ -140,7 +187,7 @@ export const ChatComponent = {
         return `
         <div data-chat-id="${chat.id}" class="chat-inbox-row p-3 flex items-center justify-between rounded-xl hover:bg-zinc-900/40 cursor-pointer transition-all group">
             <div class="flex items-center space-x-3 flex-1 min-w-0">
-                <img src="${targetAvatar}" class="w-12 h-12 rounded-full object-cover border border-zinc-900">
+                <img src="${targetAvatar}" class="avatar-trigger-preview cursor-pointer w-12 h-12 rounded-full object-cover border border-zinc-900">
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center justify-between">
                         <p class="text-xs ${nameStyleClass} tracking-tight truncate">${chat.targetUser?.displayName || 'Secure Node'}</p>
