@@ -47,7 +47,7 @@ export const MessagingService = {
         if (!messaging) return;
         onMessage(messaging, (payload) => {
             console.log("🛰️ Message received in foreground: ", payload);
-            alert(`New Notification: ${payload.notification.title}\n${payload.notification.body}`);
+            // alert(`New Notification: ${payload.notification.title}\n${payload.notification.body}`);
         });
     }
 };

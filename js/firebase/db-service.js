@@ -231,21 +231,58 @@ export const DbService = {
     },
 
     // 📸 10. NAYA: Profile Photo Upload Option (Base64 System)
+    // 📸 NAYA & UPDATED: Profile Photo Upload Option with Ultra-Fast Canvas Compression (Max 15KB)
     async uploadProfileAvatar(userId, file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.readAsDataURL(file); // File ko Base64 string mein convert karna
-            reader.onload = async () => {
-                try {
-                    const userRef = doc(db, "users", userId);
-                    await updateDoc(userRef, { photoURL: reader.result });
-                    console.log("📸 Avatar binary updated in Firestore metadata node!");
-                    resolve(reader.result);
-                } catch (err) {
-                    reject(err);
-                }
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = async () => {
+                    // HTML5 Canvas compression logic (Target 150x150 for profile micro-avatar)
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 150;
+                    const MAX_HEIGHT = 150;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                    } else {
+                        if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Compress image to JPEG with 0.7 quality factor (Tiny size, crisp resolution)
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+
+                    try {
+                        const userRef = doc(db, "users", userId);
+                        await updateDoc(userRef, { photoURL: compressedBase64 });
+                        console.log("📸 Compressed image asset injected successfully.");
+                        resolve(compressedBase64);
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
             };
             reader.onerror = (error) => reject(error);
         });
+    },
+
+    // 👤 NAYA: Real-time user document fetcher (Name backup ke liye)
+    async getUserData(userId) {
+        try {
+            const userDoc = await getDoc(doc(db, "users", userId));
+            return userDoc.exists() ? userDoc.data() : null;
+        } catch (error) {
+            console.error("❌ Error fetching absolute user document:", error);
+            return null;
+        }
     }
 };

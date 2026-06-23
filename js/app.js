@@ -79,39 +79,52 @@ class AppCore {
         }
     }
 
-    routeToDashboard(user) {
+    async routeToDashboard(user) {
         this.mainContent.innerHTML = ChatComponent.renderMainLayout();
-        document.getElementById("current-user-name").textContent = user.displayName;
         
-        let avatarPath = user.photoURL || "assets/images/default-avatar.svg";
-        if (avatarPath.endsWith("default-avatar.svg")) {
-            avatarPath = "assets/images/default-avatar.svg";
-        }
-        
-        const avatarImg = document.getElementById("current-user-avatar");
-        if (avatarImg) {
-            avatarImg.src = avatarPath;
-        }
+        // 👤 NAME RESOLUTION ENGINE: Auth state agar wrong backup de, toh seedha Firestore database node se real name uthao
+        const nameElement = document.getElementById("current-user-name");
+        nameElement.textContent = user.displayName || "Syncing profile...";
 
+        try {
+            const dbUserData = await DbService.getUserData(user.uid);
+            if (dbUserData && dbUserData.displayName) {
+                nameElement.textContent = dbUserData.displayName; // Registration waala real username set ho gaya!
+                if(dbUserData.photoURL) {
+                    document.getElementById("current-user-avatar").src = dbUserData.photoURL;
+                }
+            }
+        } catch (nameErr) {
+            console.error("⚠️ Failed to resolve real username fallback:", nameErr);
+        }
+        
         this.bindDashboardEvents();
         this.loadInboxStreams();
         
         MessagingService.requestPermissionAndGetToken(user.uid);
         MessagingService.listenForForegroundMessages();
 
-        // 📸 PROFILE AVATAR UPLOAD INTERFACE BINDING
-        document.getElementById("avatar-file-uploader").addEventListener("change", async (e) => {
-            const file = e.target.files[0];
-            if(file) {
-                try {
-                    console.log("📸 Extracting binary data string from image asset...");
-                    const newBase64 = await DbService.uploadProfileAvatar(this.currentUser.uid, file);
-                    document.getElementById("current-user-avatar").src = newBase64;
-                } catch (uploadError) {
-                    console.error("❌ Avatar persistence vector collapsed:", uploadError);
+        // 📸 PROFILE AVATAR UPLOAD INTERFACE WITH REALTIME UPLOAD LOADER VISUALS
+        const uploader = document.getElementById("avatar-file-uploader");
+        if (uploader) {
+            uploader.addEventListener("change", async (e) => {
+                const file = e.target.files[0];
+                if(file) {
+                    const loader = document.getElementById("avatar-loader");
+                    if(loader) loader.classList.remove("hidden"); // 🔥 UI PROCESS LOADER START (Spinner Dikhao)
+                    
+                    try {
+                        console.log("📸 Activating micro-canvas compression array...");
+                        const compressedBase64 = await DbService.uploadProfileAvatar(this.currentUser.uid, file);
+                        document.getElementById("current-user-avatar").src = compressedBase64;
+                    } catch (uploadError) {
+                        console.error("❌ Avatar persistence vector collapsed:", uploadError);
+                    } finally {
+                        if(loader) loader.classList.add("hidden"); // 🔥 UI PROCESS LOADER END (Spinner Chupao)
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     bindDashboardEvents() {

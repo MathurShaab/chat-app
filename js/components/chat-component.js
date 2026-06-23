@@ -1,20 +1,29 @@
 export const ChatComponent = {
-    // 🏢 Instagram Modern Layout Structure (With Secure Controls & Upload Pipelines)
+    // 🏢 Instagram Modern Layout Structure (With Processing Loader Spinner Attached)
     renderMainLayout() {
         return `
         <div class="h-full flex bg-black text-[#f5f5f5] overflow-hidden antialiased font-sans">
             <aside id="sidebar-panel" class="w-full md:w-[360px] h-full flex flex-col border-r border-zinc-900 bg-black z-20 transition-all duration-300">
                 <div class="p-5 flex items-center justify-between border-b border-zinc-900">
                     <div class="flex items-center space-x-3">
-                        <div class="relative group cursor-pointer">
-                            <img id="current-user-avatar" src="assets/images/default-avatar.svg" class="w-9 h-9 rounded-full object-cover ring-1 ring-zinc-800 transition-all group-hover:brightness-75">
+                        <div class="relative group cursor-pointer w-9 h-9 flex-shrink-0">
+                            <img id="current-user-avatar" src="assets/images/default-avatar.svg" class="w-9 h-9 rounded-full object-cover ring-1 ring-zinc-800 transition-all group-hover:brightness-50">
                             <input type="file" id="avatar-file-uploader" class="hidden" accept="image/*">
+                            
                             <div onclick="document.getElementById('avatar-file-uploader').click()" class="absolute inset-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
                                 <svg class="w-3.5 h-3.5 text-white/90" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 8.686 5h6.628c.812 0 1.543.433 1.91 1.135l1.22 2.279a1.152 1.152 0 0 0 .972.61H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1.343a1.152 1.152 0 0 0 .972-.61l1.22-2.28z"/>
                                     <circle cx="12" cy="13" r="3"/>
                                 </svg>
                             </div>
+
+                            <div id="avatar-loader" class="hidden absolute inset-0 bg-black/70 rounded-full flex items-center justify-center">
+                                <svg class="animate-spin h-4 w-4 text-[#0095F6]" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </div>
+
                             <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-black rounded-full"></span>
                         </div>
                         <div>
@@ -100,7 +109,7 @@ export const ChatComponent = {
         </div>`;
     },
 
-    // 🔍 Search Results Item Layout (Handles fallback vectors)
+    // 🔍 Search Results Item Layout
     renderUserItem(user) {
         const userAvatar = user.photoURL || 'assets/images/default-avatar.svg';
         return `
@@ -144,7 +153,7 @@ export const ChatComponent = {
         </div>`;
     },
 
-    // 🔵 Instagram Aesthetic Gradient & Charcoal Bubbles (With E2EE Deletion Binding Hooks)
+    // 🔵 Instagram Aesthetic Gradient & Charcoal Bubbles
     renderMessageItem(msg, currentUserId) {
         const isMe = msg.senderId === currentUserId;
         let ticksHTML = '';
@@ -167,10 +176,9 @@ export const ChatComponent = {
             ? 'bg-gradient-to-tr from-[#3852ff] via-[#863eff] to-[#e433ff] text-white rounded-2xl rounded-tr-sm self-end' 
             : 'bg-[#262626] text-[#efefef] rounded-2xl rounded-tl-sm self-start';
 
-        // 🔥 CRITICAL ACTION CONTROL: Class 'message-bubble-row' & 'data-msg-id' appended for double click targeting
         return `
-        <div data-msg-id="${msg.id}" class="message-bubble-row flex w-full ${isMe ? 'justify-end' : 'justify-start'} transition-all active:scale-[0.99]">
-            <div class="max-w-[70%] px-4 py-2.5 shadow-sm font-normal tracking-wide text-[13px] leading-snug break-words ${bubbleStyle}" title="${isMe ? 'Double click to unsend' : 'Secure Message Block'}">
+        <div class="flex w-full ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in">
+            <div data-msg-id="${msg.id}" class="message-bubble-row max-w-[70%] px-4 py-2.5 shadow-sm font-normal tracking-wide text-[13px] leading-snug break-words ${bubbleStyle}" title="${isMe ? 'Double click to unsend' : 'Secure Message Block'}">
                 <p>${msg.text}</p>
                 <div class="flex items-center justify-end space-x-0.5 mt-1 text-[8px] opacity-50 select-none">
                     <span>${msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
