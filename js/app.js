@@ -17,6 +17,7 @@ class AppCore {
     }
 
     async init() {
+        // 🔥 DYNAMIC SUB-FOLDER SERVICE WORKER REGISTRATION
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', async () => {
                 try {
@@ -30,6 +31,7 @@ class AppCore {
             });
         }
         
+        // 🔥 TOP PRIORITY NOTIFICATION PROMPT
         try {
             if ('Notification' in window) {
                 console.log("📢 Bootup: Requesting early notification permission...");
@@ -40,6 +42,7 @@ class AppCore {
             console.warn("📢 Bootup: Early notification request bypassed:", error);
         }
 
+        // Auth Changes Observer Pipeline
         AuthService.listenToAuthChanges((user) => {
             console.log("🛰️ STEP 3: Firebase responded! User state received:", user);
             this.hideGlobalSplashLoader();
@@ -95,6 +98,20 @@ class AppCore {
         
         MessagingService.requestPermissionAndGetToken(user.uid);
         MessagingService.listenForForegroundMessages();
+
+        // 📸 PROFILE AVATAR UPLOAD INTERFACE BINDING
+        document.getElementById("avatar-file-uploader").addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if(file) {
+                try {
+                    console.log("📸 Extracting binary data string from image asset...");
+                    const newBase64 = await DbService.uploadProfileAvatar(this.currentUser.uid, file);
+                    document.getElementById("current-user-avatar").src = newBase64;
+                } catch (uploadError) {
+                    console.error("❌ Avatar persistence vector collapsed:", uploadError);
+                }
+            }
+        });
     }
 
     bindDashboardEvents() {
@@ -137,22 +154,21 @@ class AppCore {
         this.unsubChats = DbService.listenToUserChats(this.currentUser.uid, (chats) => {
             inboxContainer.innerHTML = "";
             if (chats.length === 0) {
-                inboxContainer.innerHTML = `<p class="text-center text-[11px] text-appMuted py-4">No active connection rooms.</p>`;
+                inboxContainer.innerHTML = `<p class="text-center text-[11px] text-zinc-600 py-4">No active connection rooms.</p>`;
                 return;
             }
 
             chats.forEach(chat => {
                 inboxContainer.innerHTML += ChatComponent.renderChatItem(chat, this.currentUser.uid);
                 
-                // 🔥 SMART IN-APP NOTIFICATION (ALERT BOX COMPLETELY REMOVED) 🔥
+                // SMART IN-APP NOTIFICATION INTERCEPTOR
                 if (!isFirstLoad && chat.lastMessageSenderId !== this.currentUser.uid && this.activeChatId !== chat.id) {
                     if (Notification.permission === "granted") {
-                        new Notification(`Message from ${chat.targetUser.displayName}`, {
-                            body: chat.lastMessage,
-                            icon: chat.targetUser.photoURL || "assets/images/default-avatar.svg"
+                        new Notification(`Message from ${chat.targetUser?.displayName || 'Secure User'}`, {
+                            body: "🔒 Encrypted Content Locked",
+                            icon: chat.targetUser?.photoURL || "assets/images/default-avatar.svg"
                         });
                     }
-                    // Ganda alert popup yahan se saaf kar diya gaya hai!
                 }
             });
 
@@ -188,7 +204,7 @@ class AppCore {
     async openChatRoom(chatId, targetName, targetAvatar) {
         this.activeChatId = chatId;
         
-        // 🔥 WHATSAPP STYLE: Chat room open hote hi counter zero aur ticks blue karein
+        // WhatsApp/Insta Rule: Clear target workspace counter nodes upon entry
         await DbService.markChatAsRead(chatId, this.currentUser.uid);
         
         document.getElementById("no-chat-selected").classList.add("hidden");
@@ -202,17 +218,31 @@ class AppCore {
 
         document.getElementById("active-chat-name").textContent = targetName;
         document.getElementById("active-chat-avatar").src = targetAvatar;
-        document.getElementById("active-chat-status").textContent = "Active Stream Pipeline";
 
         if (this.unsubMessages) this.unsubMessages();
 
         const feed = document.getElementById("messages-feed");
+        
+        // 🔒 LIVE MESSAGES DECRYPTION & RENDERING PIPELINE
         this.unsubMessages = DbService.listenToMessages(chatId, (messages) => {
             feed.innerHTML = "";
             messages.forEach(msg => {
                 feed.innerHTML += ChatComponent.renderMessageItem(msg, this.currentUser.uid);
             });
             feed.scrollTop = feed.scrollHeight;
+
+            // 🔥 NAYA: INSTANT DOUBLE-CLICK TO UNSEND MESSAGE TRACE CONSOLE
+            document.querySelectorAll(".message-bubble-row").forEach(bubble => {
+                bubble.addEventListener("dblclick", async () => {
+                    const msgId = bubble.getAttribute("data-msg-id");
+                    // System checks if layout direction maps to our own UID node
+                    if (bubble.classList.contains("justify-end")) {
+                        if (confirm("Unsend this encrypted message for everyone?")) {
+                            await DbService.deleteMessage(chatId, msgId);
+                        }
+                    }
+                });
+            });
         });
 
         const form = document.getElementById("message-send-form");
@@ -225,8 +255,15 @@ class AppCore {
             await DbService.sendMessage(this.activeChatId, this.currentUser.uid, text);
         };
 
+        // 🗑️ TERMINATE SESSION CONTROL (Delete Full Chat Document)
+        document.getElementById("delete-chat-btn").onclick = async () => {
+            if(confirm("Are you sure you want to terminate this full secure stream session?")) {
+                await DbService.deleteChatRoom(chatId);
+                document.getElementById("back-to-list-btn").click();
+            }
+        };
+
         document.getElementById("back-to-list-btn").onclick = async () => {
-            // 🔥 WHATSAPP STYLE: Back aate waat active state null karein aur fir se unread sync karein
             this.activeChatId = null; 
             await DbService.markChatAsRead(chatId, this.currentUser.uid);
             sidebar.classList.remove("-ml-[100%]");

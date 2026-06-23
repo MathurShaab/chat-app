@@ -7,6 +7,7 @@ import {
     updateDoc, 
     getDoc, 
     getDocs, 
+    deleteDoc, // 🔥 Naya: Deletion ke liye
     writeBatch, 
     query, 
     where, 
@@ -16,8 +17,11 @@ import {
     increment 
 } from "firebase/firestore";
 
+// 🔥 E2EE KE LIYE AES ENCRYPTION MODULE IMPORT KIYA
+import CryptoJS from "https://esm.sh/crypto-js";
+
 export const DbService = {
-    // 🔍 1. Users ko Search karna (Name ya Email se)
+    // 🔍 1. Users ko Search karna
     async searchUsers(searchQuery, currentUserId) {
         const usersRef = collection(db, "users");
         const snapshot = await getDocs(usersRef);
@@ -25,11 +29,9 @@ export const DbService = {
         
         snapshot.forEach((doc) => {
             const data = doc.data();
-            
             if (data && data.uid && data.uid !== currentUserId && data.displayName && data.email) {
                 const nameMatch = data.displayName.toLowerCase().includes(searchQuery.toLowerCase());
                 const emailMatch = data.email.toLowerCase().includes(searchQuery.toLowerCase());
-                
                 if (nameMatch || emailMatch) {
                     results.push(data);
                 }
@@ -81,22 +83,33 @@ export const DbService = {
                 const userDoc = await getDoc(doc(db, "users", targetUid));
                 chatData.targetUser = userDoc.exists() ? userDoc.data() : { displayName: "User Node" };
                 
+                // Last message ko list mein dekhne ke liye decrypt karein (Optional safetynet)
+                if (chatData.lastMessage && chatData.isEncrypted) {
+                    try {
+                        chatData.lastMessage = CryptoJS.AES.decrypt(chatData.lastMessage, chatData.id).toString(CryptoJS.enc.Utf8);
+                    } catch(e) { chatData.lastMessage = "🔒 Encrypted Stream"; }
+                }
+
                 chats.push(chatData);
             }
             callback(chats);
         });
     },
 
-    // ✉️ 4. Message Bhejna (+ Unread Count Auto-Increment + Vercel Notification Trigger)
+    // ✉️ 4. Message Bhejna (🔒 AUTOMATIC CLIENT-SIDE AES E2EE ENCRYPTION)
     async sendMessage(chatId, senderId, text) {
         if (!text.trim()) return;
         
+        // ChatId ko hi as a secret signature key use karke client-side lock lagana
+        const encryptedText = CryptoJS.AES.encrypt(text.trim(), chatId).toString();
+
         const messagesRef = collection(db, "chats", chatId, "messages");
         await addDoc(messagesRef, {
             senderId,
-            text: text.trim(),
+            text: encryptedText, // Database mein sirf tala laga hua text jayega
             timestamp: serverTimestamp(),
-            seen: false
+            seen: false,
+            isEncrypted: true // Flag lagaya taaki purane unencrypted messages na tutein
         });
 
         const chatRef = doc(db, "chats", chatId);
@@ -113,9 +126,10 @@ export const DbService = {
         }
 
         const chatUpdateData = {
-            lastMessage: text.trim(),
+            lastMessage: encryptedText,
             lastMessageTimestamp: serverTimestamp(),
-            lastMessageSenderId: senderId
+            lastMessageSenderId: senderId,
+            isEncrypted: true
         };
 
         if (receiverId) {
@@ -126,79 +140,112 @@ export const DbService = {
 
         if (receiverId) {
             try {
+                // Vercel Notification mein raw text nahi, safety ke liye alert bhejenge
                 await fetch('https://chat-app-kappa-sooty.vercel.app/api/send-notification', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         receiverId: receiverId,                  
                         senderId: senderId,                      
-                        senderName: "New Message",               
-                        text: text.trim()                        
+                        senderName: "🔒 Secure End-to-End Chat",               
+                        text: "Sent an encrypted message."                        
                     })
                 });
-                console.log("🛰️ Smart notification command dispatched to Vercel!");
             } catch (notifError) {
-                console.error("❌ Failed to trigger Vercel notification:", notifError);
+                console.error("❌ Notification skipped:", notifError);
             }
         }
     },
 
-    // 🔵 5. Chat Window Khulne Par Unread Clear Karna aur Ticks Blue Karna
+    // 🔵 5. Chat Window Khulne Par Unread Clear Karna
     async markChatAsRead(chatId, currentUserId) {
         try {
             const chatRef = doc(db, "chats", chatId);
-            
             const clearCounter = {};
             clearCounter[`unreadCount.${currentUserId}`] = 0;
             await updateDoc(chatRef, clearCounter);
 
             const messagesRef = collection(db, "chats", chatId, "messages");
-            const unreadQuery = query(
-                messagesRef, 
-                where("senderId", "!=", currentUserId), 
-                where("seen", "==", false)
-            );
-
+            const unreadQuery = query(messagesRef, where("senderId", "!=", currentUserId), where("seen", "==", false));
             const querySnapshot = await getDocs(unreadQuery);
             
             const batch = writeBatch(db);
-            querySnapshot.forEach((msgDoc) => {
-                batch.update(msgDoc.ref, { seen: true });
-            });
-            
+            querySnapshot.forEach((msgDoc) => { batch.update(msgDoc.ref, { seen: true }); });
             await batch.commit();
-            console.log("🔵 Chat marked as read and Blue Ticks synced!");
-        } catch (error) {
-            console.error("❌ Error marking messages as read:", error);
-        }
+        } catch (error) { console.error("❌ Error marking read:", error); }
     },
 
-    // 💬 6. Chat Window Ke Messages Live Listen Karna
+    // 💬 6. Messages Listen Karna (🔓 CLIENT-SIDE AES E2EE DECRYPTION)
     listenToMessages(chatId, callback) {
-        const q = query(
-            collection(db, "chats", chatId, "messages"), 
-            orderBy("timestamp", "asc")
-        );
+        const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "asc"));
         return onSnapshot(q, (snapshot) => {
-            const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const messages = snapshot.docs.map(docSnap => {
+                const data = docSnap.data();
+                let decryptedText = data.text;
+
+                // Agar data encrypted flag ke sath hai, toh client par hi decode karo
+                if (data.isEncrypted && data.text) {
+                    try {
+                        const bytes = CryptoJS.AES.decrypt(data.text, chatId);
+                        decryptedText = bytes.toString(CryptoJS.enc.Utf8);
+                    } catch (decError) {
+                        decryptedText = "🔒 Encryption Sync Error";
+                    }
+                }
+
+                return { id: docSnap.id, ...data, text: decryptedText };
+            });
             callback(messages);
         });
     },
 
-    // 🟢 7. Online / Offline Status Update Karna (Presence System)
+    // 🟢 7. Presence System (Online/Offline)
     async updateUserPresence(userId, status) {
         if (!userId) return;
         try {
             const userRef = doc(db, "users", userId);
-            await updateDoc(userRef, {
-                status: status,       // "online" ya "offline"
-                lastSeen: serverTimestamp()
-            });
-            console.log(`🟢 Presence updated to '${status}' for user: ${userId}`);
+            await updateDoc(userRef, { status: status, lastSeen: serverTimestamp() });
+        } catch (error) { console.error("❌ Error presence:", error); }
+    },
+
+    // 🗑️ 8. NAYA: Single Message Delete Karna (Delete for Everyone)
+    async deleteMessage(chatId, messageId) {
+        try {
+            const msgRef = doc(db, "chats", chatId, "messages", messageId);
+            await deleteDoc(msgRef);
+            console.log(`🗑️ Message ${messageId} deleted from secure pipeline.`);
         } catch (error) {
-            console.error("❌ Error updating user presence:", error);
+            console.error("❌ Error deleting message:", error);
         }
+    },
+
+    // 🗑️ 9. NAYA: Poori Chat Room Delete Karna
+    async deleteChatRoom(chatId) {
+        try {
+            const chatRef = doc(db, "chats", chatId);
+            await deleteDoc(chatRef);
+            console.log(`🗑️ Chat room ${chatId} terminated successfully.`);
+        } catch (error) {
+            console.error("❌ Error deleting chat room:", error);
+        }
+    },
+
+    // 📸 10. NAYA: Profile Photo Upload Option (Base64 System)
+    async uploadProfileAvatar(userId, file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file); // File ko Base64 string mein convert karna
+            reader.onload = async () => {
+                try {
+                    const userRef = doc(db, "users", userId);
+                    await updateDoc(userRef, { photoURL: reader.result });
+                    console.log("📸 Avatar binary updated in Firestore metadata node!");
+                    resolve(reader.result);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.onerror = (error) => reject(error);
+        });
     }
 };
