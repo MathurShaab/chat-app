@@ -1,4 +1,5 @@
 export const ChatComponent = {
+    // 🏢 Main Layout Structure
     renderMainLayout() {
         return `
         <div class="h-full flex bg-appBg overflow-hidden">
@@ -58,7 +59,7 @@ export const ChatComponent = {
                             <button id="back-to-list-btn" class="md:hidden p-2 -ml-2 text-appMuted hover:text-appText">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                             </button>
-                            <img id="active-chat-avatar" src="assets/images/default-avatar.png" class="w-10 h-10 rounded-full object-cover border border-white/5">
+                            <img id="active-chat-avatar" src="assets/images/default-avatar.svg" class="w-10 h-10 rounded-full object-cover border border-white/5">
                             <div>
                                 <h4 id="active-chat-name" class="text-sm font-semibold text-appText">...</h4>
                                 <span id="active-chat-status" class="text-[10px] text-appMuted">Updating network node...</span>
@@ -81,10 +82,11 @@ export const ChatComponent = {
         </div>`;
     },
 
+    // 🔍 Global Search User Row Layout
     renderUserItem(user) {
         return `
         <div data-uid="${user.uid}" class="search-user-row p-2.5 flex items-center space-x-3 rounded-xl hover:bg-appAccent/10 cursor-pointer border border-transparent transition-all">
-            <img src="${user.photoURL}" class="w-9 h-9 rounded-full object-cover">
+            <img src="${user.photoURL || 'assets/images/default-avatar.svg'}" class="w-9 h-9 rounded-full object-cover">
             <div class="flex-1 min-w-0">
                 <p class="text-xs font-semibold text-appText truncate">${user.displayName}</p>
                 <p class="text-[10px] text-appMuted truncate">${user.email}</p>
@@ -92,32 +94,65 @@ export const ChatComponent = {
         </div>`;
     },
 
+    // 🟢 Sidebar Inbox Row Layout (With WhatsApp Unread Counter)
     renderChatItem(chat, currentUserId) {
+        // 🔥 Current User ke liye kitne unread messages hain nikalie
+        const unreadCount = chat.unreadCount?.[currentUserId] || 0;
+        
+        // Counter agar 0 se bada hai toh ek pyaara sa active green pill badge banayein
+        const badgeHTML = unreadCount > 0 
+            ? `<span class="bg-emerald-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1.5 shadow-sm shadow-emerald-900/30 ml-2 animate-pulse">${unreadCount}</span>` 
+            : '';
+
+        // Text color ko bold aur bright rakhein agar koi unread message hai
+        const textWeightClass = unreadCount > 0 ? 'font-medium text-white' : 'text-appMuted';
+
         return `
         <div data-chat-id="${chat.id}" class="chat-inbox-row p-3 flex items-center space-x-3 rounded-xl hover:bg-white/5 cursor-pointer border border-transparent transition-all">
-            <img src="${chat.targetUser.photoURL}" class="w-11 h-11 rounded-full object-cover border border-white/5">
+            <img src="${chat.targetUser.photoURL || 'assets/images/default-avatar.svg'}" class="w-11 h-11 rounded-full object-cover border border-white/5">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between">
                     <p class="text-xs font-semibold text-appText truncate">${chat.targetUser.displayName}</p>
                     <span class="text-[9px] text-appMuted">${chat.lastMessageTimestamp ? new Date(chat.lastMessageTimestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
                 </div>
-                <p class="text-[11px] text-appMuted truncate mt-0.5">${chat.lastMessage || 'Tap to begin streaming...'}</p>
+                <div class="flex items-center justify-between mt-0.5">
+                    <p class="text-[11px] truncate flex-1 pr-2 ${textWeightClass}">${chat.lastMessage || 'Tap to begin streaming...'}</p>
+                    ${badgeHTML}
+                </div>
             </div>
         </div>`;
     },
 
+    // 🔵 Single Chat Bubble Layout (With Real-time Double Grey & Double Blue Ticks)
     renderMessageItem(msg, currentUserId) {
         const isMe = msg.senderId === currentUserId;
+        let ticksHTML = '';
+
+        // Ticks sirf hamare bheje hue message par dikhenge, samne wale ke par nahi
+        if (isMe) {
+            if (msg.seen === true) {
+                // 🔵 Double Blue Ticks (Samne wale ne chat room khol liya hai)
+                ticksHTML = `
+                <svg class="w-3.5 h-3.5 text-sky-400 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M2 12l5 5L18 6M10 17l5 5L24 10" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>`;
+            } else {
+                // 🩶 Double Grey Ticks (Server par chala gaya par samne wale ne abhi tak dekha nahi)
+                ticksHTML = `
+                <svg class="w-3.5 h-3.5 text-zinc-500 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M2 12l5 5L18 6M10 17l5 5L24 10" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>`;
+            }
+        }
+
         return `
         <div class="flex w-full ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in">
             <div class="max-w-[75%] px-4 py-2.5 rounded-2xl text-xs shadow-md shadow-black/10 line-clamp-none break-words
                 ${isMe ? 'bg-appAccent text-appText rounded-tr-none' : 'bg-appCard text-appText rounded-tl-none border border-white/5'}">
                 <p class="leading-relaxed">${msg.text}</p>
-                <div class="flex items-center justify-end space-x-1 mt-1 text-[8px] opacity-60">
+                <div class="flex items-center justify-end space-x-1 mt-1 text-[8px] opacity-75">
                     <span>${msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
-                    ${isMe ? `
-                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-                    ` : ''}
+                    ${ticksHTML}
                 </div>
             </div>
         </div>`;

@@ -17,17 +17,11 @@ class AppCore {
     }
 
     async init() {
-        console.log("🛰️ STEP 1: AppCore Engine started successfully!");
-
-        // 🔥 DYNAMIC SUB-FOLDER SERVICE WORKER REGISTRATION 🔥
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', async () => {
                 try {
-                    // Yeh automatic pata lagayega ki app kis sub-folder mein chal rahi hai
                     const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
                     const swPath = `${basePath}firebase-messaging-sw.js`;
-                    
-                    // Scope ke sath register karein taaki GitHub Pages khush rahe
                     const reg = await navigator.serviceWorker.register(swPath, { scope: basePath });
                     console.log('🚀 PWA Service Worker Registered at Scope:', reg.scope);
                 } catch (err) {
@@ -36,8 +30,6 @@ class AppCore {
             });
         }
         
-        // 🔥 TOP PRIORITY NOTIFICATION PROMPT 🔥
-        // App load hote hi, bina login ka wait kiye, sabse pehle permission maango
         try {
             if ('Notification' in window) {
                 console.log("📢 Bootup: Requesting early notification permission...");
@@ -48,7 +40,6 @@ class AppCore {
             console.warn("📢 Bootup: Early notification request bypassed:", error);
         }
 
-        // Baki ka auth listener code jo pehle se tha:
         AuthService.listenToAuthChanges((user) => {
             console.log("🛰️ STEP 3: Firebase responded! User state received:", user);
             this.hideGlobalSplashLoader();
@@ -62,8 +53,6 @@ class AppCore {
             }
         });
     }
-
-    // Iske niche ka hideGlobalSplashLoader aur baki code bilkul same rehne dein...
 
     cleanupListeners() {
         if (this.unsubChats) this.unsubChats();
@@ -87,29 +76,26 @@ class AppCore {
         }
     }
 
-   routeToDashboard(user) {
-    this.mainContent.innerHTML = ChatComponent.renderMainLayout();
-    
-    document.getElementById("current-user-name").textContent = user.displayName;
-    
-    // --- DATABASE OLD PATH FALLBACK FIX ---
-    // Agar database se purana .png path aaye, toh use automatic .svg par divert kar do
-    let avatarPath = user.photoURL || "assets/images/default-avatar.svg";
-    if (avatarPath.endsWith("default-avatar.svg")) {
-        avatarPath = "assets/images/default-avatar.svg";
-    }
-    
-    const avatarImg = document.getElementById("current-user-avatar");
-    if (avatarImg) {
-        avatarImg.src = avatarPath;
-    }
+    routeToDashboard(user) {
+        this.mainContent.innerHTML = ChatComponent.renderMainLayout();
+        document.getElementById("current-user-name").textContent = user.displayName;
+        
+        let avatarPath = user.photoURL || "assets/images/default-avatar.svg";
+        if (avatarPath.endsWith("default-avatar.svg")) {
+            avatarPath = "assets/images/default-avatar.svg";
+        }
+        
+        const avatarImg = document.getElementById("current-user-avatar");
+        if (avatarImg) {
+            avatarImg.src = avatarPath;
+        }
 
-    this.bindDashboardEvents();
-    this.loadInboxStreams();
-    
-    MessagingService.requestPermissionAndGetToken(user.uid);
-    MessagingService.listenForForegroundMessages();
-}
+        this.bindDashboardEvents();
+        this.loadInboxStreams();
+        
+        MessagingService.requestPermissionAndGetToken(user.uid);
+        MessagingService.listenForForegroundMessages();
+    }
 
     bindDashboardEvents() {
         document.getElementById("logout-btn").addEventListener("click", () => AuthService.logout());
@@ -144,9 +130,9 @@ class AppCore {
         });
     }
 
-   loadInboxStreams() {
+    loadInboxStreams() {
         const inboxContainer = document.getElementById("inbox-chats-list");
-        let isFirstLoad = true; // Taaki page refresh hote hi purane messages ka pop-up na aaye
+        let isFirstLoad = true; 
 
         this.unsubChats = DbService.listenToUserChats(this.currentUser.uid, (chats) => {
             inboxContainer.innerHTML = "";
@@ -158,24 +144,18 @@ class AppCore {
             chats.forEach(chat => {
                 inboxContainer.innerHTML += ChatComponent.renderChatItem(chat, this.currentUser.uid);
                 
-                // 🔥 SMART IN-APP NOTIFICATION PIPELINE 🔥
-                // Agar pehla load nahi hai, naya message kisi aur ne bheja hai, aur wo chat window abhi khuli nahi hai
+                // 🔥 SMART IN-APP NOTIFICATION (ALERT BOX COMPLETELY REMOVED) 🔥
                 if (!isFirstLoad && chat.lastMessageSenderId !== this.currentUser.uid && this.activeChatId !== chat.id) {
-                    
-                    // 1. Browser Desktop Notification (Agar permission mili hui hai)
                     if (Notification.permission === "granted") {
                         new Notification(`Message from ${chat.targetUser.displayName}`, {
                             body: chat.lastMessage,
                             icon: chat.targetUser.photoURL || "assets/images/default-avatar.svg"
                         });
-                    } else {
-                        // 2. Fallback: Agar browser permission nahi hai toh in-app alert dialog box
-                        alert(`📩 New message from ${chat.targetUser.displayName}: "${chat.lastMessage}"`);
                     }
+                    // Ganda alert popup yahan se saaf kar diya gaya hai!
                 }
             });
 
-            // Pehle load ke baad trigger chalu karein taaki sirf real-time naye messages track hon
             isFirstLoad = false; 
             this.bindInboxChatsClick();
         });
@@ -208,6 +188,9 @@ class AppCore {
     async openChatRoom(chatId, targetName, targetAvatar) {
         this.activeChatId = chatId;
         
+        // 🔥 WHATSAPP STYLE: Chat room open hote hi counter zero aur ticks blue karein
+        await DbService.markChatAsRead(chatId, this.currentUser.uid);
+        
         document.getElementById("no-chat-selected").classList.add("hidden");
         const activeChatBox = document.getElementById("active-chat-box");
         activeChatBox.classList.remove("hidden");
@@ -237,11 +220,15 @@ class AppCore {
             e.preventDefault();
             const input = document.getElementById("message-text-input");
             const text = input.value;
+            if(!text.trim()) return;
             input.value = "";
             await DbService.sendMessage(this.activeChatId, this.currentUser.uid, text);
         };
 
-        document.getElementById("back-to-list-btn").onclick = () => {
+        document.getElementById("back-to-list-btn").onclick = async () => {
+            // 🔥 WHATSAPP STYLE: Back aate waat active state null karein aur fir se unread sync karein
+            this.activeChatId = null; 
+            await DbService.markChatAsRead(chatId, this.currentUser.uid);
             sidebar.classList.remove("-ml-[100%]");
             activeChatBox.classList.add("hidden");
             document.getElementById("no-chat-selected").classList.remove("hidden");
