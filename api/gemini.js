@@ -22,7 +22,8 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'Missing GEMINI_API_KEY configuration' });
         }
 
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+        // 🚀 PRODUCTION FIX: 'v1beta' ko badal kar stable production 'v1' endpoint kar diya hai
+        const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
         
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -36,7 +37,6 @@ export default async function handler(req, res) {
 
         const data = await response.json();
         
-        // 🔍 DEBUG WINDOW: Agar Google se koi error aaya hai, toh use chupao mat, direct response mein bhejo!
         if (data.error) {
             return res.status(500).json({ 
                 error: 'Google Gemini API Rejected Request', 
@@ -48,7 +48,6 @@ export default async function handler(req, res) {
             const aiReply = data.candidates[0].content.parts[0].text;
             return res.status(200).json({ reply: aiReply });
         } else {
-            // Agar bina error ke bhi ajeeb structure aaya, toh pura raw data bhej do check karne ke liye
             return res.status(500).json({ 
                 error: 'Unexpected structural payload received from Google', 
                 rawPayloadReceived: data 
