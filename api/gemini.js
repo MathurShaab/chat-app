@@ -22,8 +22,10 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'Missing GEMINI_API_KEY configuration' });
         }
 
-        // 🚀 PRODUCTION FIX: 'v1beta' ko badal kar stable production 'v1' endpoint kar diya hai
-        const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+        // 🚀 THE ULTIMATE FIX: Model name ko 'gemini-1.5-flash-latest' kiya hai 
+        // (Aap chahein toh iski jagah 'gemini-2.0-flash' bhi use kar sakte hain)
+        const modelIdentifier = "gemini-1.5-flash-latest";
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelIdentifier}:generateContent?key=${GEMINI_KEY}`;
         
         const response = await fetch(endpoint, {
             method: 'POST',
