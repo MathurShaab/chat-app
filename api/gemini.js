@@ -24,8 +24,8 @@ export default async function handler(req, res) {
 
         // 🚀 THE ULTIMATE FIX: Model name ko 'gemini-1.5-flash-latest' kiya hai 
         // (Aap chahein toh iski jagah 'gemini-2.0-flash' bhi use kar sakte hain)
-        const modelIdentifier = "gemini-1.5-flash-latest";
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelIdentifier}:generateContent?key=${GEMINI_KEY}`;
+        const modelIdentifier = "gemini-2.0-flash";
+const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelIdentifier}:generateContent?key=${GEMINI_KEY}`;
         
         const response = await fetch(endpoint, {
             method: 'POST',
