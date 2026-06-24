@@ -97,7 +97,7 @@ export const DbService = {
     },
 
     // ✉️ 4. Message Bhejna (🔒 AUTOMATIC CLIENT-SIDE AES E2EE ENCRYPTION)
-    async sendMessage(chatId, senderId, text) {
+ async sendMessage(chatId, senderId, text) {
         if (!text.trim()) return;
         
         // ChatId ko hi as a secret signature key use karke client-side lock lagana
@@ -115,14 +115,19 @@ export const DbService = {
         const chatRef = doc(db, "chats", chatId);
         let receiverId = null;
 
-        try {
-            const chatSnap = await getDoc(chatRef);
-            if (chatSnap.exists()) {
-                const chatData = chatSnap.data();
-                receiverId = chatData.participants?.find(id => id !== senderId);
+        // 🔥 FIX 1: AI Stream ke liye receiverId force karein taaki virtual room bypass na ho
+        if (chatId.startsWith("ai_stream_")) {
+            receiverId = "nexus-ai-bot";
+        } else {
+            try {
+                const chatSnap = await getDoc(chatRef);
+                if (chatSnap.exists()) {
+                    const chatData = chatSnap.data();
+                    receiverId = chatData.participants?.find(id => id !== senderId);
+                }
+            } catch (metaError) {
+                console.error("❌ Error fetching chat metadata:", metaError);
             }
-        } catch (metaError) {
-            console.error("❌ Error fetching chat metadata:", metaError);
         }
 
         const chatUpdateData = {
@@ -132,13 +137,17 @@ export const DbService = {
             isEncrypted: true
         };
 
-        if (receiverId) {
+        // 🔥 FIX 2: Virtual room ko database mein register karne ke liye participants array must hai
+        if (chatId.startsWith("ai_stream_")) {
+            chatUpdateData.participants = [senderId, "nexus-ai-bot"];
+        } else if (receiverId) {
             chatUpdateData[`unreadCount.${receiverId}`] = increment(1);
         }
 
-        await updateDoc(chatRef, chatUpdateData);
+        // 🚀 THE FIX: updateDoc mita kar setDoc with merge lagaya taaki pehle message par room auto-create ho jaye!
+        await setDoc(chatRef, chatUpdateData, { merge: true });
 
-        if (receiverId) {
+        if (receiverId && receiverId !== "nexus-ai-bot") {
             try {
                 // Vercel Notification mein raw text nahi, safety ke liye alert bhejenge
                 await fetch('https://chat-app-kappa-sooty.vercel.app/api/send-notification', {
@@ -153,6 +162,52 @@ export const DbService = {
                 });
             } catch (notifError) {
                 console.error("❌ Notification skipped:", notifError);
+            }
+        }
+
+        // 🤖 GEMINI BOT AUTO-RESPONSE INTELLIGENT INTERCEPTOR
+        if (receiverId === "nexus-ai-bot") {
+            try {
+                console.log("🤖 Message targeted to AI node. Initiating Gemini stream...");
+                
+                // 1. Live Vercel API Call (Hamara naya endpoint)
+                const aiResponse = await fetch('https://chat-app-kappa-sooty.vercel.app/api/gemini', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text.trim() })
+                });
+
+                const aiData = await aiResponse.json();
+                
+                if (aiData.reply) {
+                    // E2EE logic sync keeping consistency
+                    const encryptedAiText = CryptoJS.AES.encrypt(aiData.reply.trim(), chatId).toString();
+
+                    // 2. Insert AI response back inside sub-collection message stream
+                    const aiMessagesRef = collection(db, "chats", chatId, "messages");
+                    await addDoc(aiMessagesRef, {
+                        senderId: "nexus-ai-bot",
+                        text: encryptedAiText,
+                        timestamp: serverTimestamp(),
+                        seen: true, // System auto-read
+                        isEncrypted: true
+                    });
+
+                    // 3. Sync Chat Room List Last Row State Tracker
+                    const aiChatUpdateData = {
+                        lastMessage: encryptedAiText,
+                        lastMessageTimestamp: serverTimestamp(),
+                        lastMessageSenderId: "nexus-ai-bot",
+                        isEncrypted: true
+                    };
+                    
+                    // ✅ FIXED: AI response update par bhi setDoc with merge lagaya hai safe execution ke liye
+                    await setDoc(chatRef, aiChatUpdateData, { merge: true });
+                    
+                    console.log("🤖 Gemini reply processed and E2EE injected successfully.");
+                }
+            } catch (aiError) {
+                console.error("❌ Gemini Pipeline Interceptor collapsed:", aiError);
             }
         }
     },
