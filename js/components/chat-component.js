@@ -170,35 +170,29 @@ export const ChatComponent = {
     },
 
     // 🟢 Instagram Sleek Chat List Row
-    renderChatItem(chat, currentUserId) {
-        const unreadCount = chat.unreadCount?.[currentUserId] || 0;
-        const targetAvatar = chat.targetUser?.photoURL || 'assets/images/default-avatar.svg';
-        
-        const dotHTML = unreadCount > 0 
-            ? `<span class="w-2 h-2 bg-[#0095F6] rounded-full ml-3 flex-shrink-0 shadow-md shadow-blue-500/20 animate-pulse"></span>` 
-            : '';
+ renderChatItem(chat, currentUserId) {
+    const isUnread = chat.unreadCount > 0;
 
-        const textStyleClass = unreadCount > 0 
-            ? 'font-semibold text-zinc-100 text-xs' 
-            : 'text-zinc-500 text-xs font-normal';
+    // ⚡ Unread hone par font bold aur white hoga, nahi toh normal text rahega
+    const nameStyle = isUnread ? 'font-bold text-white' : 'text-zinc-300';
+    const msgStyle = isUnread ? 'font-semibold text-zinc-100' : 'text-zinc-400';
+    const rowBg = isUnread ? 'bg-zinc-800/40' : 'hover:bg-zinc-800/20';
 
-        const nameStyleClass = unreadCount > 0 ? 'font-bold text-white' : 'font-medium text-zinc-300';
-
-        return `
-        <div data-chat-id="${chat.id}" class="chat-inbox-row p-3 flex items-center justify-between rounded-xl hover:bg-zinc-900/40 cursor-pointer transition-all group">
-            <div class="flex items-center space-x-3 flex-1 min-w-0">
-                <img src="${targetAvatar}" class="avatar-trigger-preview cursor-pointer w-12 h-12 rounded-full object-cover border border-zinc-900">
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between">
-                        <p class="text-xs ${nameStyleClass} tracking-tight truncate">${chat.targetUser?.displayName || 'Secure Node'}</p>
-                        <span class="text-[9px] text-zinc-600 font-medium">${chat.lastMessageTimestamp ? new Date(chat.lastMessageTimestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
-                    </div>
-                    <p class="truncate mt-0.5 ${textStyleClass}">${chat.lastMessage || '🔒 Encrypted Stream Node...'}</p>
-                </div>
+    return `
+    <div class="chat-inbox-row flex items-center p-3 cursor-pointer transition ${rowBg}" data-chat-id="${chat.id}">
+        <div class="relative w-11 h-11 flex-shrink-0">
+            <img src="${chat.targetUser?.photoURL || 'default-avatar.png'}" class="w-full h-full rounded-full object-cover" alt="avatar">
+        </div>
+        <div class="ml-3 flex-1 overflow-hidden">
+            <div class="flex items-center justify-between">
+                <p class="text-[14px] ${nameStyle}">${chat.targetUser?.displayName || 'Secure User'}</p>
             </div>
-            ${dotHTML}
-        </div>`;
-    },
+            <span class="text-xs truncate mt-1 block ${msgStyle}">${chat.lastMessage || ''}</span>
+        </div>
+        
+        ${isUnread ? `<div class="w-2.5 h-2.5 bg-sky-500 rounded-full ml-auto my-auto mr-1 animate-pulse"></div>` : ''}
+    </div>`;
+},
 
     // 🔵 Instagram Aesthetic Gradient & Charcoal Bubbles
     renderMessageItem(msg, currentUserId) {

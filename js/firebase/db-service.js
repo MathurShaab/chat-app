@@ -67,34 +67,61 @@ export const DbService = {
     },
 
     // 📑 3. Sidebar Chat List ko Live Listen karna
-    listenToUserChats(userId, callback) {
-        const q = query(
-            collection(db, "chats"), 
-            where("participants", "array-contains", userId),
-            orderBy("lastMessageTimestamp", "desc")
-        );
-        return onSnapshot(q, async (snapshot) => {
-            const chats = [];
-            for (const docSnap of snapshot.docs) {
-                const chatData = docSnap.data();
-                chatData.id = docSnap.id;
-                
-                const targetUid = chatData.participants.find(id => id !== userId);
+listenToUserChats(userId, callback) {
+    const q = query(
+        collection(db, "chats"), 
+        where("participants", "array-contains", userId),
+        orderBy("lastMessageTimestamp", "desc")
+    );
+    return onSnapshot(q, async (snapshot) => {
+        const chats = [];
+        for (const docSnap of snapshot.docs) {
+            const chatData = docSnap.data();
+            chatData.id = docSnap.id;
+            
+            const targetUid = chatData.participants.find(id => id !== userId);
+            
+            // 🤖 AI BOT PROFILE SAFETYNET: Agar target AI bot hai toh hardcode profile load karein
+            if (targetUid === "nexus-ai-bot") {
+                chatData.targetUser = {
+                    uid: "nexus-ai-bot",
+                    displayName: "Nexus AI (Groq)", // Aap chahein toh Gemini bhi likh sakte hain
+                    photoURL: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=60"
+                };
+            } else {
+                // Normal human nodes ke liye database se data nikalein
                 const userDoc = await getDoc(doc(db, "users", targetUid));
                 chatData.targetUser = userDoc.exists() ? userDoc.data() : { displayName: "User Node" };
-                
-                // Last message ko list mein dekhne ke liye decrypt karein (Optional safetynet)
-                if (chatData.lastMessage && chatData.isEncrypted) {
-                    try {
-                        chatData.lastMessage = CryptoJS.AES.decrypt(chatData.lastMessage, chatData.id).toString(CryptoJS.enc.Utf8);
-                    } catch(e) { chatData.lastMessage = "🔒 Encrypted Stream"; }
-                }
-
-                chats.push(chatData);
             }
-            callback(chats);
-        });
-    },
+            
+            // INSTAGRAM/WHATSAPP UNREAD FEATURE: No Index Required Logic
+            try {
+                const unreadQ = query(
+                    collection(db, "chats", chatData.id, "messages"),
+                    where("seen", "==", false)
+                );
+                const unreadSnap = await getDocs(unreadQ);
+                
+                chatData.unreadCount = unreadSnap.docs.filter(
+                    doc => doc.data().senderId !== userId
+                ).length;
+            } catch(e) {
+                console.error("Unread count fetch error:", e);
+                chatData.unreadCount = 0;
+            }
+            
+            // Last message ko list mein dekhne ke liye decrypt karein (Optional safetynet)
+            if (chatData.lastMessage && chatData.isEncrypted) {
+                try {
+                    chatData.lastMessage = CryptoJS.AES.decrypt(chatData.lastMessage, chatData.id).toString(CryptoJS.enc.Utf8);
+                } catch(e) { chatData.lastMessage = "🔒 Encrypted Stream"; }
+            }
+
+            chats.push(chatData);
+        }
+        callback(chats);
+    });
+},
 
     // ✉️ 4. Message Bhejna (🔒 AUTOMATIC CLIENT-SIDE AES E2EE ENCRYPTION)
  async sendMessage(chatId, senderId, text) {
@@ -213,22 +240,38 @@ export const DbService = {
     },
 
     // 🔵 5. Chat Window Khulne Par Unread Clear Karna
-    async markChatAsRead(chatId, currentUserId) {
-        try {
-            const chatRef = doc(db, "chats", chatId);
-            const clearCounter = {};
-            clearCounter[`unreadCount.${currentUserId}`] = 0;
-            await updateDoc(chatRef, clearCounter);
+async markChatAsRead(chatId, currentUserId) {
+    try {
+        const unreadQ = query(
+            collection(db, "chats", chatId, "messages"),
+            where("seen", "==", false)
+        );
+        const snapshot = await getDocs(unreadQ);
+        const batch = writeBatch(db);
+        let needsUpdate = false;
 
-            const messagesRef = collection(db, "chats", chatId, "messages");
-            const unreadQuery = query(messagesRef, where("senderId", "!=", currentUserId), where("seen", "==", false));
-            const querySnapshot = await getDocs(unreadQuery);
-            
-            const batch = writeBatch(db);
-            querySnapshot.forEach((msgDoc) => { batch.update(msgDoc.ref, { seen: true }); });
+        snapshot.docs.forEach((docSnap) => {
+            if (docSnap.data().senderId !== currentUserId) {
+                batch.update(docSnap.ref, { seen: true });
+                needsUpdate = true;
+            }
+        });
+
+        if (needsUpdate) {
+            // 🚀 TRIGGER TRICK: Parent chat document ko bhi batch mein update karo
+            // Isse sidebar listener (onSnapshot) instantly jaag jayega aur list refresh kar dega!
+            const chatRef = doc(db, "chats", chatId);
+            batch.update(chatRef, {
+                [`lastRead_${currentUserId}`]: new Date().getTime() // Dummy timestamp to force trigger
+            });
+
             await batch.commit();
-        } catch (error) { console.error("❌ Error marking read:", error); }
-    },
+            console.log("🎯 Chat successfully marked as read & sidebar triggered!");
+        }
+    } catch (error) {
+        console.error("Error marking chat as read:", error);
+    }
+},
 
     // 💬 6. Messages Listen Karna (🔓 CLIENT-SIDE AES E2EE DECRYPTION)
     listenToMessages(chatId, callback) {

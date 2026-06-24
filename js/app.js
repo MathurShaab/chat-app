@@ -260,19 +260,20 @@ class AppCore {
             inboxContainer.innerHTML = "";
 
             // 🤖 ENGINE INJECT: Virtual AI Chat Room Frame Configuration
-            const aiBotVirtualRoom = {
-                id: `ai_stream_${this.currentUser.uid}`, 
-                participants: [this.currentUser.uid, "nexus-ai-bot"],
-                lastMessage: "🔒 Tap to initiate secure AI brainstorming...",
-                lastMessageTimestamp: null,
-                lastMessageSenderId: "nexus-ai-bot",
-                targetUser: {
-                    uid: "nexus-ai-bot",
-                    displayName: "Nexus AI (Gemini)",
-                    photoURL: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=60" // Premium futuristic abstract AI avatar
-                },
-                unreadCount: {}
-            };
+            // 🤖 ENGINE INJECT: Virtual AI Chat Room Frame Configuration
+const aiBotVirtualRoom = {
+    id: `ai_stream_${this.currentUser.uid}`, 
+    participants: [this.currentUser.uid, "nexus-ai-bot"],
+    lastMessage: "🔒 Tap to initiate secure AI brainstorming...",
+    lastMessageTimestamp: null,
+    lastMessageSenderId: "nexus-ai-bot",
+    targetUser: {
+        uid: "nexus-ai-bot",
+        displayName: "Nexus AI (Gemini)",
+        photoURL: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=60"
+    },
+    unreadCount: 0 // 🌟 FIXED: {} hata kar 0 kiya taaki counter smoothly chale
+};
 
             // Check karein kya firestore se real list mein AI room pehle se aa raha hai
             const hasAIRoom = chats.some(c => c.participants?.includes("nexus-ai-bot"));
@@ -323,15 +324,28 @@ class AppCore {
     }
 
     bindInboxChatsClick() {
-        document.querySelectorAll(".chat-inbox-row").forEach(row => {
-            row.addEventListener("click", () => {
-                const chatId = row.getAttribute("data-chat-id");
-                const targetName = row.querySelector("p").textContent;
-                const targetAvatar = row.querySelector("img").src;
-                this.openChatRoom(chatId, targetName, targetAvatar);
-            });
+    document.querySelectorAll(".chat-inbox-row").forEach(row => {
+        // 🌟 click listener ko 'async' kiya hai taaki await kaam kar sake
+        row.addEventListener("click", async () => {
+            const chatId = row.getAttribute("data-chat-id");
+            const targetName = row.querySelector("p").textContent;
+            const targetAvatar = row.querySelector("img").src;
+            
+            // 🚀 INSTAGRAM/WHATSAPP READ TRICK: Chat par click hote hi read mark karein
+            // (Hum check kar rahe hain ki ye normal chat ho, AI stream na ho)
+            if (chatId && !chatId.startsWith("ai_stream_")) {
+                try {
+                    await DbService.markChatAsRead(chatId, this.currentUser.uid);
+                } catch (error) {
+                    console.error("Error marking chat as read on click:", error);
+                }
+            }
+
+            // Aapka purana chat room open karne ka logic
+            this.openChatRoom(chatId, targetName, targetAvatar);
         });
-    }
+    });
+}
 
     async openChatRoom(chatId, targetName, targetAvatar) {
         this.activeChatId = chatId;
