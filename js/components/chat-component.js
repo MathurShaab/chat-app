@@ -1,3 +1,65 @@
+function formatChatMessage(text) {
+    if (!text) return '';
+
+    // 1. HTML Entities ko escape karein taaki layout safe rahe
+    let cleanText = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    // 2. TRIPLE BACKTICKS: Multi-line Code Blocks (```lang ... ```)
+    const codeBlockRegex = /```([a-zA-Z0-9_+-]*)([\s\S]*?)```/g;
+    cleanText = cleanText.replace(codeBlockRegex, (match, lang, code) => {
+        const language = lang && lang.trim() ? lang.trim().toUpperCase() : 'CODE';
+        const codeContent = code.trim();
+        
+        // Code ko base64 mein encode kar rahe hain taaki parsing crash na ho
+        const safeCode = btoa(unescape(encodeURIComponent(codeContent)));
+
+        return `
+        <div class="code-block-box my-3 w-full max-w-full rounded-xl overflow-hidden bg-[#0d0d11] border border-zinc-800 font-mono text-[12px] text-left select-text">
+            <div class="flex items-center justify-between px-4 py-2 bg-[#16161e] border-b border-zinc-800 text-[10px] text-zinc-400 font-sans tracking-wider select-none">
+                <span class="font-bold text-zinc-500">${language}</span>
+                <button data-code="${safeCode}" class="copy-code-trigger hover:text-white transition-colors font-medium flex items-center cursor-pointer">
+                    Copy
+                </button>
+            </div>
+            <pre class="p-4 overflow-x-auto whitespace-pre text-emerald-400/90 leading-relaxed font-mono"><code>${codeContent}</code></pre>
+        </div>`;
+    });
+
+    // 3. 🌟 FIXED: MARKDOWN BOLD FILTER (**text** ko real bold banayega)
+    cleanText = cleanText.replace(/\*\*([\s\S]+?)\*\*/g, '<strong class="font-bold text-white opacity-95">$1</strong>');
+
+    // 4. SINGLE BACKTICK: Inline Code Highlight (`code`)
+    cleanText = cleanText.replace(/`([^`]+)`/g, '<code class="bg-zinc-800 text-pink-400 px-1.5 py-0.5 rounded font-mono text-[11px]">$1</code>');
+
+    return cleanText;
+}
+// Sidebar Queue ke liye dedicated text preview formatter
+function formatChatPreview(text) {
+    if (!text) return '';
+
+    let preview = text;
+
+    // 1. Agar message mein code block (```) hai, toh use clean text indicator se badlein
+    // Kyunki ek line ki row mein code blocks layout ko crash kar dete hain
+    if (preview.includes('```')) {
+        preview = preview.replace(/```[\s\S]*?```/g, '💻 [Code Block]');
+    }
+
+    // 2. HTML Entities Escape for security
+    preview = preview.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // 3. 🌟 FIXED: Markdown Bold (**text**) ko inline bold span mein badlein
+    // class 'text-zinc-200' use ki hai taaki message white chamke jab bold ho
+    preview = preview.replace(/\*\*([\s\S]+?)\*\*/g, '<span class="font-bold text-zinc-200">$1</span>');
+
+    // 4. Inline code backticks (`code`) ko normal text banayein preview ke liye
+    preview = preview.replace(/`([^`]+)`/g, '$1');
+
+    return preview;
+}
 export const ChatComponent = {
     // 🏢 Instagram Modern Layout Structure (With Crop, Rotate & Fullscreen Modals)
     renderMainLayout() {
@@ -170,62 +232,94 @@ export const ChatComponent = {
     },
 
     // 🟢 Instagram Sleek Chat List Row
- renderChatItem(chat, currentUserId) {
+renderChatItem(chat, currentUserId) {
     const isUnread = chat.unreadCount > 0;
 
-    // ⚡ Unread hone par font bold aur white hoga, nahi toh normal text rahega
-    const nameStyle = isUnread ? 'font-bold text-white' : 'text-zinc-300';
+    // Styling configurations base on active states
+    const nameStyle = isUnread ? 'font-bold text-white text-[14px]' : 'text-zinc-300 text-[14px]';
     const msgStyle = isUnread ? 'font-semibold text-zinc-100' : 'text-zinc-400';
     const rowBg = isUnread ? 'bg-zinc-800/40' : 'hover:bg-zinc-800/20';
 
+    // 🚀 MASTER TRICK: Raw text ko parse karke clean HTML preview nikalna
+    const cleanedPreview = formatChatPreview(chat.lastMessage || '');
+
     return `
+    <!-- ⚠️ FIXED: Class matches your selector exactly -->
     <div class="chat-inbox-row flex items-center p-3 cursor-pointer transition ${rowBg}" data-chat-id="${chat.id}">
+        
+        <!-- Avatar Section -->
         <div class="relative w-11 h-11 flex-shrink-0">
-            <img src="${chat.targetUser?.photoURL || 'default-avatar.png'}" class="w-full h-full rounded-full object-cover" alt="avatar">
-        </div>
-        <div class="ml-3 flex-1 overflow-hidden">
-            <div class="flex items-center justify-between">
-                <p class="text-[14px] ${nameStyle}">${chat.targetUser?.displayName || 'Secure User'}</p>
-            </div>
-            <span class="text-xs truncate mt-1 block ${msgStyle}">${chat.lastMessage || ''}</span>
+            <img src="${chat.targetUser?.photoURL || 'default-avatar.png'}" class="w-full h-full rounded-full object-cover avatar-trigger-preview" alt="avatar">
         </div>
         
-        ${isUnread ? `<div class="w-2.5 h-2.5 bg-sky-500 rounded-full ml-auto my-auto mr-1 animate-pulse"></div>` : ''}
+        <!-- Details Viewport -->
+        <div class="ml-3 flex-1 overflow-hidden flex flex-col justify-center">
+            <div class="flex items-center justify-between w-full">
+                <!-- ⚠️ CRUCIAL: Retained <p> tag exactly because your click listener tracks row.querySelector("p") -->
+                <p class="${nameStyle} truncate m-0 leading-tight">${chat.targetUser?.displayName || 'Secure User'}</p>
+            </div>
+            
+            <!-- ⚠️ FIXED: Changed from <p> to <div> to support inline parsed HTML spans safely, with proper truncation -->
+            <div class="text-xs truncate mt-1.5 block max-w-full ${msgStyle} tracking-wide leading-normal">
+                ${cleanedPreview}
+            </div>
+        </div>
+        
+        <!-- WhatsApp/Instagram Style Blue Notification Dot -->
+        ${isUnread ? `<div class="w-2.5 h-2.5 bg-sky-500 rounded-full ml-auto my-auto mr-1 flex-shrink-0 animate-pulse"></div>` : ''}
     </div>`;
 },
 
     // 🔵 Instagram Aesthetic Gradient & Charcoal Bubbles
-    renderMessageItem(msg, currentUserId) {
-        const isMe = msg.senderId === currentUserId;
-        let ticksHTML = '';
+renderMessageItem(msg, currentUserId) {
+    const isMe = msg.senderId === currentUserId;
+    const isAI = msg.senderId === "nexus-ai-bot";
+    let ticksHTML = '';
 
-        if (isMe) {
-            if (msg.seen === true) {
-                ticksHTML = `
-                <svg class="w-3 h-3 text-sky-400 opacity-90 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                    <path d="M2 12l5 5L18 6M10 17l5 5L24 10" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>`;
-            } else {
-                ticksHTML = `
-                <svg class="w-3 h-3 text-zinc-500 opacity-60 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M2 12l5 5L18 6M10 17l5 5L24 10" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>`;
-            }
-        }
-
-        const bubbleStyle = isMe 
-            ? 'bg-gradient-to-tr from-[#3852ff] via-[#863eff] to-[#e433ff] text-white rounded-2xl rounded-tr-sm self-end' 
-            : 'bg-[#262626] text-[#efefef] rounded-2xl rounded-tl-sm self-start';
-
-        return `
-        <div class="flex w-full ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in">
-            <div data-msg-id="${msg.id}" class="message-bubble-row max-w-[70%] px-4 py-2.5 shadow-sm font-normal tracking-wide text-[13px] leading-snug break-words ${bubbleStyle}" title="${isMe ? 'Double click to unsend' : 'Secure Message Block'}">
-                <p>${msg.text}</p>
-                <div class="flex items-center justify-end space-x-0.5 mt-1 text-[8px] opacity-50 select-none">
-                    <span>${msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</span>
-                    ${ticksHTML}
-                </div>
-            </div>
-        </div>`;
+    if (isMe) {
+        const strokeWidth = msg.seen ? '3' : '2.5';
+        const colorClass = msg.seen ? 'text-sky-400 opacity-90' : 'text-zinc-500 opacity-60';
+        ticksHTML = `
+        <svg class="w-3 h-3 ${colorClass} ml-1 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}">
+            <path d="M2 12l5 5L18 6M10 17l5 5L24 10" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
     }
+
+    // Colors & Vibe Customization
+    let bubbleStyle = '';
+    if (isMe) {
+        bubbleStyle = 'bg-gradient-to-tr from-[#3852ff] via-[#863eff] to-[#e433ff] text-white rounded-2xl rounded-tr-sm self-end';
+    } else if (isAI) {
+        bubbleStyle = 'bg-[#1e1e24] border border-zinc-800 text-[#f3f4f6] rounded-2xl rounded-tl-sm self-start';
+    } else {
+        bubbleStyle = 'bg-[#262626] text-[#efefef] rounded-2xl rounded-tl-sm self-start';
+    }
+
+    // Safe Timestamp Layout
+    let timeString = '';
+    if (msg.timestamp) {
+        const dateObj = typeof msg.timestamp.toDate === 'function' ? msg.timestamp.toDate() : new Date(msg.timestamp);
+        timeString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const finalHTMLContent = formatChatMessage(msg.text || '');
+
+    return `
+    <!-- ⚠️ FIXED: Added 'px-3' taaki mobile view mein bubbles screen ki deewar se na takrayein -->
+    <div class="flex w-full px-3 ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in mb-2 box-border">
+        
+        <!-- ⚠️ FIXED: Main bubble se 'overflow-hidden' hata diya hai taaki text na cuttey, aur max-width mobile ke liye max-w-[85%] kiya hai -->
+        <div data-msg-id="${msg.id || ''}" class="message-bubble-row max-w-[85%] sm:max-w-[75%] md:max-w-[65%] w-auto flex flex-col px-4 py-2.5 shadow-sm font-normal tracking-wide text-[13px] leading-snug break-words ${bubbleStyle}" title="${isMe ? 'Double click to unsend' : 'Secure Message Block'}" style="word-break: break-word;">
+            
+            <!-- Message core container text viewport -->
+            <div class="whitespace-pre-wrap w-full text-left">${finalHTMLContent}</div>
+            
+            <div class="flex items-center justify-end space-x-0.5 mt-1 text-[8px] opacity-50 select-none w-full">
+                <span>${timeString}</span>
+                ${ticksHTML}
+            </div>
+        </div>
+    </div>`;
+}
 };
+// Function: Chat message ke text ko professionally parse aur format karne ke liye

@@ -191,27 +191,66 @@ class AppCore {
 
         // Global Event Delegation Node to catch clicks on any active user profile avatar
         document.addEventListener("click", (e) => {
-            // Check if clicked element has avatar preview trigger metadata
-            const trigger = e.target.closest(".avatar-trigger-preview") || (e.target.id === "current-user-avatar" ? e.target : null);
-            
-            if (trigger) {
-                e.stopPropagation();
-                
-                // Fetch context specific credentials from current row element hierarchy
-                let targetName = "Profile Photo";
-                const row = trigger.closest(".chat-inbox-row") || trigger.closest("header");
-                
-                if (row) {
-                    const nameNode = row.querySelector("p") || row.querySelector("h4") || row.querySelector("h3");
-                    if (nameNode) targetName = nameNode.textContent.replace("🔒 End-to-End Encrypted", "").trim();
-                }
+    
+    // ----------------------------------------------------
+    // 📸 FEATURE 1: AVATAR PREVIEW LOGIC
+    // ----------------------------------------------------
+    const avatarTrigger = e.target.closest(".avatar-trigger-preview") || (e.target.id === "current-user-avatar" ? e.target : null);
+    
+    if (avatarTrigger) {
+        e.stopPropagation();
+        
+        // Fetch context specific credentials from current row element hierarchy
+        let targetName = "Profile Photo";
+        const row = avatarTrigger.closest(".chat-inbox-row") || avatarTrigger.closest("header");
+        
+        if (row) {
+            const nameNode = row.querySelector("p") || row.querySelector("h4") || row.querySelector("h3");
+            if (nameNode) targetName = nameNode.textContent.replace("🔒 End-to-End Encrypted", "").trim();
+        }
 
-                // Inject assets directly inside overlay view box
-                previewModalImg.src = trigger.src;
-                previewModalName.textContent = targetName;
-                previewModal.classList.remove("hidden"); // Open view panel
+        // Inject assets directly inside overlay view box
+        previewModalImg.src = avatarTrigger.src;
+        previewModalName.textContent = targetName;
+        previewModal.classList.remove("hidden"); // Open view panel
+        return; // Return early taaki niche ka code check na karna pade
+    }
+
+    // ----------------------------------------------------
+    // 📋 FEATURE 2: AI CODE BLOCK COPY LOGIC (New)
+    // ----------------------------------------------------
+    const copyBtn = e.target.closest(".copy-code-trigger");
+    
+    if (copyBtn) {
+        e.stopPropagation();
+        const base64Code = copyBtn.getAttribute('data-code');
+        
+        if (base64Code) {
+            try {
+                // Base64 string ko wapas original code text mein decode karein
+                const decodedCode = decodeURIComponent(escape(atob(base64Code)));
+                
+                // Clipboard par text copy karein
+                navigator.clipboard.writeText(decodedCode).then(() => {
+                    // Instagram/VS Code style instant visual feedback
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = 'Copied! ✓';
+                    copyBtn.classList.add('text-emerald-400');
+                    
+                    // 2 second baad button wapas normal ho jayega
+                    setTimeout(() => {
+                        copyBtn.textContent = originalText;
+                        copyBtn.classList.remove('text-emerald-400');
+                    }, 2000);
+                });
+            } catch (err) {
+                console.error("Failed to copy code block:", err);
             }
-        });
+        }
+        return;
+    }
+
+});
 
         // Close View panel controls wire bindings
         const closePreview = () => { previewModal.classList.add("hidden"); };
